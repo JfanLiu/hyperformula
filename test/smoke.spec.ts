@@ -1,4 +1,4 @@
-import {HyperFormula} from '../src'
+import {DetailedCellError, ErrorType, HyperFormula} from '../src'
 import {SimpleCellAddress, simpleCellAddress} from '../src/Cell'
 
 const adr = (stringAddress: string, sheet: number = 0): SimpleCellAddress => {
@@ -16,6 +16,11 @@ const colNumber = (input: string): number => {
       return currentColumn * 26 + (nextLetter.toUpperCase().charCodeAt(0) - 64)
     }, 0) - 1
   }
+}
+
+const expectCycle = (value: unknown): void => {
+  expect(value).toBeInstanceOf(DetailedCellError)
+  expect((value as DetailedCellError).type).toBe(ErrorType.CYCLE)
 }
 
 describe('HyperFormula', () => {
@@ -100,6 +105,32 @@ describe('HyperFormula', () => {
     hf.removeRows(0, [1, 1])
 
     expect(hf.getCellValue(adr('A4'))).toBe(6)
+
+    hf.destroy()
+  })
+
+  it('should resolve cycles guarded by inactive IF branches', () => {
+    const hf = HyperFormula.buildFromArray([
+      ['=IF(FALSE(),B1,1)', '=A1+1', '=A1+1'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(hf.getCellValue(adr('A1'))).toBe(1)
+    expect(hf.getCellValue(adr('B1'))).toBe(2)
+    expect(hf.getCellValue(adr('C1'))).toBe(2)
+
+    const cycleChanges = hf.setCellContents(adr('A1'), '=IF(TRUE(),B1,1)')
+
+    expectCycle(hf.getCellValue(adr('A1')))
+    expectCycle(hf.getCellValue(adr('B1')))
+    expectCycle(hf.getCellValue(adr('C1')))
+    expect(cycleChanges.length).toBe(3)
+
+    const resolvedChanges = hf.setCellContents(adr('A1'), '=IF(FALSE(),B1,1)')
+
+    expect(hf.getCellValue(adr('A1'))).toBe(1)
+    expect(hf.getCellValue(adr('B1'))).toBe(2)
+    expect(hf.getCellValue(adr('C1'))).toBe(2)
+    expect(resolvedChanges.map(change => change.newValue)).toEqual([1, 2, 2])
 
     hf.destroy()
   })

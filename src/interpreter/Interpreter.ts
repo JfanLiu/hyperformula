@@ -98,6 +98,7 @@ export class Interpreter {
           return new CellError(ErrorType.REF, ErrorMessage.SheetRef)
         }
 
+        state.activeEdgeCollector?.recordCellEdge(state.formulaVertex, address)
         return this.dependencyGraph.getCellValue(address)
       }
       case AstNodeType.NUMBER:
@@ -182,7 +183,12 @@ export class Interpreter {
         }
         const pluginFunction = this.functionRegistry.getFunction(ast.procedureName)
         if (pluginFunction !== undefined) {
-          return pluginFunction(ast, new InterpreterState(state.formulaAddress, state.arraysFlag || this.functionRegistry.isArrayFunction(ast.procedureName), state.formulaVertex))
+          return pluginFunction(ast, new InterpreterState(
+            state.formulaAddress,
+            state.arraysFlag || this.functionRegistry.isArrayFunction(ast.procedureName),
+            state.formulaVertex,
+            state.activeEdgeCollector,
+          ))
         } else {
           return new CellError(ErrorType.NAME, ErrorMessage.FunctionName(ast.procedureName))
         }
@@ -190,6 +196,7 @@ export class Interpreter {
       case AstNodeType.NAMED_EXPRESSION: {
         const namedExpression = this.namedExpressions.nearestNamedExpression(ast.expressionName, state.formulaAddress.sheet)
         if (namedExpression) {
+          state.activeEdgeCollector?.recordNamedExpressionEdge(state.formulaVertex, ast.expressionName, namedExpression.address)
           return this.dependencyGraph.getCellValue(namedExpression.address)
         } else {
           return new CellError(ErrorType.NAME, ErrorMessage.NamedExpressionName(ast.expressionName))
@@ -205,6 +212,7 @@ export class Interpreter {
         }
 
         const range = AbsoluteCellRange.fromCellRange(ast, state.formulaAddress)
+        state.activeEdgeCollector?.recordRangeEdge(state.formulaVertex, range.start, range.end)
         const arrayVertex = this.dependencyGraph.getArray(range)
 
         if (arrayVertex) {
@@ -231,6 +239,7 @@ export class Interpreter {
           return new CellError(ErrorType.REF, ErrorMessage.RangeManySheets)
         }
         const range = AbsoluteColumnRange.fromColumnRange(ast, state.formulaAddress)
+        state.activeEdgeCollector?.recordRangeEdge(state.formulaVertex, range.start, range.end)
         return SimpleRangeValue.onlyRange(range, this.dependencyGraph)
       }
       case AstNodeType.ROW_RANGE: {
@@ -242,6 +251,7 @@ export class Interpreter {
           return new CellError(ErrorType.REF, ErrorMessage.RangeManySheets)
         }
         const range = AbsoluteRowRange.fromRowRangeAst(ast, state.formulaAddress)
+        state.activeEdgeCollector?.recordRangeEdge(state.formulaVertex, range.start, range.end)
         return SimpleRangeValue.onlyRange(range, this.dependencyGraph)
       }
       case AstNodeType.PARENTHESIS: {

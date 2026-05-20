@@ -6,6 +6,7 @@
 import {CellError, ErrorType} from '../../Cell'
 import {ErrorMessage} from '../../error-message'
 import {ProcedureAst} from '../../parser'
+import {SimpleRangeValue} from '../../SimpleRangeValue'
 import {InterpreterState} from '../InterpreterState'
 import {InternalNoErrorScalarValue, InternalScalarValue, InterpreterValue} from '../InterpreterValue'
 import {FunctionArgumentType, FunctionPlugin, FunctionPluginTypecheck, ImplementedFunctions} from './FunctionPlugin'
@@ -135,6 +136,32 @@ export class BooleanPlugin extends FunctionPlugin implements FunctionPluginTypec
    * @param state
    */
   public conditionalIf(ast: ProcedureAst, state: InterpreterState): InterpreterValue {
+    const metadata = this.metadata('IF')
+    const conditionValue = this.evaluateAst(ast.args[0], state)
+    if (conditionValue instanceof SimpleRangeValue) {
+      return this.conditionalIfWithEagerArguments(ast, state)
+    }
+
+    const condition = this.coerceToType(conditionValue, metadata.parameters![0], state) as boolean | CellError | undefined
+    if (condition === undefined) {
+      return new CellError(ErrorType.VALUE, ErrorMessage.WrongType)
+    }
+    if (condition instanceof CellError) {
+      return condition
+    }
+
+    if (condition) {
+      return this.evaluateAst(ast.args[1], state)
+    }
+
+    if (ast.args[2] !== undefined) {
+      return this.evaluateAst(ast.args[2], state)
+    }
+
+    return metadata.parameters![2].defaultValue as InternalScalarValue
+  }
+
+  private conditionalIfWithEagerArguments(ast: ProcedureAst, state: InterpreterState): InterpreterValue {
     return this.runFunction(ast.args, state, this.metadata('IF'), (condition, arg2, arg3) => {
       return condition ? arg2 : arg3
     })

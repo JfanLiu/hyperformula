@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `IF` formulas reporting `#CYCLE!` when inactive branches contained the only cyclic dependency.
+
 ## [3.3.0] - 2026-05-20
 
 ### Added

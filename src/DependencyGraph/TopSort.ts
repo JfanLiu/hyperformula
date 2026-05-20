@@ -6,6 +6,7 @@
 export interface TopSortResult<T> {
   sorted: T[],
   cycled: T[],
+  cyclicSccs: T[][],
 }
 
 // node status life cycle: undefined -> ON_STACK -> PROCESSED -> POPPED
@@ -26,6 +27,7 @@ export class TopSort<T> {
   private nodeStatus: NodeVisitStatus[] = []
   private order: number[] = []
   private sccNonSingletons: boolean[] = []
+  private sccs: number[][] = []
   private timeCounter: number = 0
 
   constructor(
@@ -140,6 +142,7 @@ export class TopSort<T> {
       })
 
       this.order.push(...currentSCC)
+      this.sccs.push(currentSCC)
 
       if (currentSCC.length > 1) {
         currentSCC.forEach((t) => {
@@ -164,7 +167,37 @@ export class TopSort<T> {
 
     const sorted: T[] = []
     const cycled: T[] = []
+    const cyclicSccs: T[][] = []
     this.order.reverse()
+
+    const componentByNodeId = new Map<number, number[]>()
+    this.sccs.forEach((component: number[]) => {
+      component.forEach((id) => {
+        componentByNodeId.set(id, component)
+      })
+    })
+
+    const emittedComponents = new Set<number>()
+    this.order.forEach((t: number) => {
+      const component = componentByNodeId.get(t)
+      if (component === undefined || emittedComponents.has(component[0])) {
+        return
+      }
+
+      emittedComponents.add(component[0])
+      const isCyclic = component.length > 1 || this.getAdjacentNodeIds(component[0]).includes(component[0])
+      if (!isCyclic) {
+        return
+      }
+
+      const nodes = component
+        .map((id) => this.nodesSparseArray[id])
+        .filter((node) => node !== undefined)
+
+      if (nodes.length > 0) {
+        cyclicSccs.push(nodes)
+      }
+    })
 
     this.order.forEach((t: number) => {
       const adjacentNodes = this.getAdjacentNodeIds(t)
@@ -184,6 +217,6 @@ export class TopSort<T> {
       }
     })
 
-    return {sorted, cycled}
+    return {sorted, cycled, cyclicSccs}
   }
 }
