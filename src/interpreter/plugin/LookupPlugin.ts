@@ -289,7 +289,9 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     }
 
     const searchStrategy = isVerticalSearch ? this.columnSearch : this.rowSearch
-    const indexFound = this.searchInRange(key, lookupRange, isWildcardMatchMode, searchOptions, searchStrategy)
+    const indexFound = this.shouldUseExactSearch(searchOptions, isWildcardMatchMode)
+      ? this.findExactMatch(key, lookupRange, state, searchOptions.returnOccurrence ?? 'first')
+      : this.searchInRange(key, lookupRange, isWildcardMatchMode, searchOptions, searchStrategy)
 
     if (indexFound === -1) {
       return (notFoundFlag == ErrorType.NA) ? new CellError(ErrorType.NA, ErrorMessage.ValueNotFound) : notFoundFlag
@@ -329,12 +331,15 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     return index + 1
   }
 
-  private findExactMatch(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, state: InterpreterState): number {
+  private findExactMatch(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, state: InterpreterState, returnOccurrence: 'first' | 'last' = 'first'): number {
     const normalizedKey = LookupPlugin.normalizeMatchValue(key)
+    const start = returnOccurrence === 'first' ? 0 : rangeValue.numberOfElements() - 1
+    const end = returnOccurrence === 'first' ? rangeValue.numberOfElements() : -1
+    const step = returnOccurrence === 'first' ? 1 : -1
 
     if (rangeValue.range === undefined) {
       const values = rangeValue.valuesFromTopLeftCorner()
-      for (let index = 0; index < values.length; index++) {
+      for (let index = start; index !== end; index += step) {
         if (LookupPlugin.normalizeMatchValue(values[index]) === normalizedKey) {
           return index
         }
@@ -346,7 +351,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     const isVertical = rangeValue.width() === 1
     const length = isVertical ? range.height() : range.width()
 
-    for (let index = 0; index < length; index++) {
+    for (let index = returnOccurrence === 'first' ? 0 : length - 1; returnOccurrence === 'first' ? index < length : index >= 0; index += step) {
       const address = isVertical
         ? simpleCellAddress(range.sheet, range.start.col, range.start.row + index)
         : simpleCellAddress(range.sheet, range.start.col + index, range.start.row)
@@ -364,6 +369,12 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
   private static normalizeMatchValue(value: InternalScalarValue | RawNoErrorScalarValue): RawScalarValue {
     const rawValue = getRawValue(value)
     return typeof rawValue === 'string' ? forceNormalizeString(rawValue) : rawValue
+  }
+
+  private shouldUseExactSearch(searchOptions: SearchOptions, isWildcardMatchMode: boolean): boolean {
+    return !isWildcardMatchMode
+      && searchOptions.ordering === 'none'
+      && searchOptions.ifNoMatch === 'returnNotFound'
   }
 
   private shouldTrackExactLookup(searchOptions: SearchOptions): boolean {

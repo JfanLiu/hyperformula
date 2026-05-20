@@ -301,6 +301,30 @@ describe('HyperFormula', () => {
     horizontalHf.destroy()
   })
 
+  it('should resolve exact XLOOKUP cycles from lookup array cells after the first match', () => {
+    const verticalHf = HyperFormula.buildFromArray([
+      ['=XLOOKUP(1,A3:A4,B3:B4)'],
+      [null],
+      [1, 10],
+      ['=A1+1', 20],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(verticalHf.getCellValue(adr('A1'))).toBe(10)
+    expect(verticalHf.getCellValue(adr('A4'))).toBe(11)
+
+    verticalHf.destroy()
+
+    const horizontalHf = HyperFormula.buildFromArray([
+      [null, null, 1, '=A2+1'],
+      ['=XLOOKUP(1,C1:D1,C2:D2)', null, 10, 20],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(horizontalHf.getCellValue(adr('A2'))).toBe(10)
+    expect(horizontalHf.getCellValue(adr('D1'))).toBe(11)
+
+    horizontalHf.destroy()
+  })
+
   it('should resolve exact MATCH cycles from cells after the first match', () => {
     const verticalHf = HyperFormula.buildFromArray([
       ['=MATCH(1,A3:A4,0)'],
