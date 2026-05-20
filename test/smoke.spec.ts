@@ -267,6 +267,31 @@ describe('HyperFormula', () => {
     hlookupHf.destroy()
   })
 
+  it('should resolve exact lookup cycles from lookup column and row cells after the first match', () => {
+    const vlookupHf = HyperFormula.buildFromArray([
+      ['=VLOOKUP(1,A3:B4,2,FALSE())'],
+      [null],
+      [1, 10],
+      ['=A1+1', 20],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(vlookupHf.getCellValue(adr('A1'))).toBe(10)
+    expect(vlookupHf.getCellValue(adr('A4'))).toBe(11)
+
+    vlookupHf.destroy()
+
+    const hlookupHf = HyperFormula.buildFromArray([
+      [1, '=A3+1'],
+      [10, 20],
+      ['=HLOOKUP(1,A1:B2,2,FALSE())'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(hlookupHf.getCellValue(adr('A3'))).toBe(10)
+    expect(hlookupHf.getCellValue(adr('B1'))).toBe(11)
+
+    hlookupHf.destroy()
+  })
+
   it('should resolve XLOOKUP cycles from unused return array entries', () => {
     const verticalHf = HyperFormula.buildFromArray([
       ['=XLOOKUP(1,A3:A4,B3:B4)'],

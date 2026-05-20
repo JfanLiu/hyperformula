@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed `IFERROR` formulas reporting `#CYCLE!` when inactive fallback branches contained the only cyclic dependency.
 - Fixed `IFNA` formulas reporting `#CYCLE!` when inactive fallback branches contained the only cyclic dependency.
 - Fixed exact `VLOOKUP` and `HLOOKUP` formulas reporting `#CYCLE!` when unused lookup table entries contained the only cyclic dependency.
+- Fixed exact `VLOOKUP` and `HLOOKUP` formulas reporting `#CYCLE!` when lookup column or row cells after the first match contained the only cyclic dependency.
 - Fixed `XLOOKUP` formulas reporting `#CYCLE!` when unused return array entries contained the only cyclic dependency.
 - Fixed exact `MATCH` formulas reporting `#CYCLE!` when cells after the first match contained the only cyclic dependency.
 - Fixed `INDEX` formulas reporting `#CYCLE!` when unused range entries contained the only cyclic dependency.

@@ -218,8 +218,11 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     } else {
       searchedRange = SimpleRangeValue.onlyRange(AbsoluteCellRange.spanFrom(range.start, 1, range.height()), this.dependencyGraph)
     }
-    const rowIndex = this.searchInRange(key, searchedRange, searchOptions.ordering === 'none', searchOptions, this.columnSearch)
-    if (range !== undefined && this.shouldTrackExactLookup(searchOptions)) {
+    const useExactSearch = this.shouldUseExactLookupScan(key, searchOptions)
+    const rowIndex = useExactSearch
+      ? this.findExactMatch(key, searchedRange, state, 'first', range)
+      : this.searchInRange(key, searchedRange, searchOptions.ordering === 'none', searchOptions, this.columnSearch)
+    if (range !== undefined && this.shouldTrackExactLookup(searchOptions) && !useExactSearch) {
       this.recordVlookupSearchColumnAccesses(state, range)
     }
 
@@ -254,8 +257,11 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     } else {
       searchedRange = SimpleRangeValue.onlyRange(AbsoluteCellRange.spanFrom(range.start, range.width(), 1), this.dependencyGraph)
     }
-    const colIndex = this.searchInRange(key, searchedRange, searchOptions.ordering === 'none', searchOptions, this.rowSearch)
-    if (range !== undefined && this.shouldTrackExactLookup(searchOptions)) {
+    const useExactSearch = this.shouldUseExactLookupScan(key, searchOptions)
+    const colIndex = useExactSearch
+      ? this.findExactMatch(key, searchedRange, state, 'first', range)
+      : this.searchInRange(key, searchedRange, searchOptions.ordering === 'none', searchOptions, this.rowSearch)
+    if (range !== undefined && this.shouldTrackExactLookup(searchOptions) && !useExactSearch) {
       this.recordHlookupSearchRowAccesses(state, range)
     }
 
@@ -331,7 +337,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     return index + 1
   }
 
-  private findExactMatch(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, state: InterpreterState, returnOccurrence: 'first' | 'last' = 'first'): number {
+  private findExactMatch(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, state: InterpreterState, returnOccurrence: 'first' | 'last' = 'first', dependencyRange: AbsoluteCellRange | undefined = undefined): number {
     const normalizedKey = LookupPlugin.normalizeMatchValue(key)
     const start = returnOccurrence === 'first' ? 0 : rangeValue.numberOfElements() - 1
     const end = returnOccurrence === 'first' ? rangeValue.numberOfElements() : -1
@@ -348,6 +354,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     }
 
     const range = rangeValue.range
+    const trackedRange = dependencyRange ?? range
     const isVertical = rangeValue.width() === 1
     const length = isVertical ? range.height() : range.width()
 
@@ -356,7 +363,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
         ? simpleCellAddress(range.sheet, range.start.col, range.start.row + index)
         : simpleCellAddress(range.sheet, range.start.col + index, range.start.row)
 
-      this.recordRangeDependencyAccess(state, range, address)
+      this.recordRangeDependencyAccess(state, trackedRange, address)
 
       if (LookupPlugin.normalizeMatchValue(this.dependencyGraph.getScalarValue(address)) === normalizedKey) {
         return index
@@ -375,6 +382,12 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     return !isWildcardMatchMode
       && searchOptions.ordering === 'none'
       && searchOptions.ifNoMatch === 'returnNotFound'
+  }
+
+  private shouldUseExactLookupScan(key: RawNoErrorScalarValue, searchOptions: SearchOptions): boolean {
+    return searchOptions.ordering === 'none'
+      && searchOptions.ifNoMatch === 'returnNotFound'
+      && !(typeof key === 'string' && this.arithmeticHelper.requiresRegex(key))
   }
 
   private shouldTrackExactLookup(searchOptions: SearchOptions): boolean {
