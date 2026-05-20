@@ -157,4 +157,27 @@ describe('HyperFormula', () => {
 
     hf.destroy()
   })
+
+  it('should resolve cycles guarded by inactive SWITCH branches', () => {
+    const hf = HyperFormula.buildFromArray([
+      ['=SWITCH(1,1,1,2,B1)', '=A1+1'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(hf.getCellValue(adr('A1'))).toBe(1)
+    expect(hf.getCellValue(adr('B1'))).toBe(2)
+
+    const cycleChanges = hf.setCellContents(adr('A1'), '=SWITCH(2,1,1,2,B1)')
+
+    expectCycle(hf.getCellValue(adr('A1')))
+    expectCycle(hf.getCellValue(adr('B1')))
+    expect(cycleChanges.length).toBe(2)
+
+    const resolvedChanges = hf.setCellContents(adr('A1'), '=SWITCH(1,1,1,2,B1)')
+
+    expect(hf.getCellValue(adr('A1'))).toBe(1)
+    expect(hf.getCellValue(adr('B1'))).toBe(2)
+    expect(resolvedChanges.map(change => change.newValue)).toEqual([1, 2])
+
+    hf.destroy()
+  })
 })

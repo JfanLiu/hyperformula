@@ -229,6 +229,61 @@ export class BooleanPlugin extends FunctionPlugin implements FunctionPluginTypec
   }
 
   public switch(ast: ProcedureAst, state: InterpreterState): InterpreterValue {
+    const metadata = this.metadata('SWITCH')
+    if (ast.args.length < 3) {
+      return this.switchWithEagerArguments(ast, state)
+    }
+
+    const selectorValue = this.evaluateAst(ast.args[0], state)
+    if (selectorValue instanceof SimpleRangeValue) {
+      return this.switchWithEagerArguments(ast, state)
+    }
+
+    const selector = this.coerceToType(selectorValue, metadata.parameters![0], state) as InternalNoErrorScalarValue | CellError | undefined
+    if (selector === undefined) {
+      return new CellError(ErrorType.VALUE, ErrorMessage.WrongType)
+    }
+    if (selector instanceof CellError) {
+      return selector
+    }
+
+    let idx = 1
+    for (; idx + 1 < ast.args.length; idx += 2) {
+      const matchValue = this.evaluateAst(ast.args[idx], state)
+      if (matchValue instanceof SimpleRangeValue) {
+        return this.switchWithEagerArguments(ast, state)
+      }
+
+      const match = this.coerceToType(matchValue, metadata.parameters![1], state) as InternalNoErrorScalarValue | CellError | undefined
+      if (match === undefined) {
+        return new CellError(ErrorType.VALUE, ErrorMessage.WrongType)
+      }
+      if (match instanceof CellError) {
+        continue
+      }
+      if (this.arithmeticHelper.eq(selector, match)) {
+        return this.evaluateSwitchResult(ast.args[idx + 1], state)
+      }
+    }
+
+    if (idx < ast.args.length) {
+      return this.evaluateSwitchResult(ast.args[idx], state)
+    }
+
+    return new CellError(ErrorType.NA, ErrorMessage.NoDefault)
+  }
+
+  private evaluateSwitchResult(ast: ProcedureAst['args'][number], state: InterpreterState): InterpreterValue {
+    const resultValue = this.evaluateAst(ast, state)
+    const coercedResultValue = this.coerceToType(resultValue, this.metadata('SWITCH').parameters![2], state)
+    if (coercedResultValue === undefined) {
+      return new CellError(ErrorType.VALUE, ErrorMessage.WrongType)
+    }
+
+    return coercedResultValue as InterpreterValue
+  }
+
+  private switchWithEagerArguments(ast: ProcedureAst, state: InterpreterState): InterpreterValue {
     return this.runFunction(ast.args, state, this.metadata('SWITCH'), (selector, ...args) => {
       const n = args.length
       let i = 0
