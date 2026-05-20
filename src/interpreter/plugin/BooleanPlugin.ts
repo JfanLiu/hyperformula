@@ -269,6 +269,37 @@ export class BooleanPlugin extends FunctionPlugin implements FunctionPluginTypec
   }
 
   public choose(ast: ProcedureAst, state: InterpreterState): InterpreterValue {
+    const metadata = this.metadata('CHOOSE')
+    if (ast.args.length < 2) {
+      return this.chooseWithEagerArguments(ast, state)
+    }
+
+    const selectorValue = this.evaluateAst(ast.args[0], state)
+    if (selectorValue instanceof SimpleRangeValue) {
+      return this.chooseWithEagerArguments(ast, state)
+    }
+
+    const selector = this.coerceToType(selectorValue, metadata.parameters![0], state) as number | CellError | undefined
+    if (selector === undefined) {
+      return new CellError(ErrorType.VALUE, ErrorMessage.WrongType)
+    }
+    if (selector instanceof CellError) {
+      return selector
+    }
+    if (selector > ast.args.length - 1) {
+      return new CellError(ErrorType.NUM, ErrorMessage.Selector)
+    }
+
+    const selectedValue = this.evaluateAst(ast.args[selector], state)
+    const coercedSelectedValue = this.coerceToType(selectedValue, metadata.parameters![1], state)
+    if (coercedSelectedValue === undefined) {
+      return new CellError(ErrorType.VALUE, ErrorMessage.WrongType)
+    }
+
+    return coercedSelectedValue as InterpreterValue
+  }
+
+  private chooseWithEagerArguments(ast: ProcedureAst, state: InterpreterState): InterpreterValue {
     return this.runFunction(ast.args, state, this.metadata('CHOOSE'), (selector, ...args) => {
       if (selector > args.length) {
         return new CellError(ErrorType.NUM, ErrorMessage.Selector)
