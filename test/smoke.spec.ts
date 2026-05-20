@@ -180,4 +180,27 @@ describe('HyperFormula', () => {
 
     hf.destroy()
   })
+
+  it('should resolve cycles guarded by inactive IFERROR fallback branches', () => {
+    const hf = HyperFormula.buildFromArray([
+      ['=IFERROR(1,B1)', '=A1+1'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(hf.getCellValue(adr('A1'))).toBe(1)
+    expect(hf.getCellValue(adr('B1'))).toBe(2)
+
+    const cycleChanges = hf.setCellContents(adr('A1'), '=IFERROR(1/0,B1)')
+
+    expectCycle(hf.getCellValue(adr('A1')))
+    expectCycle(hf.getCellValue(adr('B1')))
+    expect(cycleChanges.length).toBe(2)
+
+    const resolvedChanges = hf.setCellContents(adr('A1'), '=IFERROR(1,B1)')
+
+    expect(hf.getCellValue(adr('A1'))).toBe(1)
+    expect(hf.getCellValue(adr('B1'))).toBe(2)
+    expect(resolvedChanges.map(change => change.newValue)).toEqual([1, 2])
+
+    hf.destroy()
+  })
 })
