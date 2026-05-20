@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed `CHOOSE` formulas reporting `#CYCLE!` when inactive options contained the only cyclic dependency.
 - Fixed `SWITCH` formulas reporting `#CYCLE!` when inactive branches contained the only cyclic dependency.
 - Fixed `IFERROR` formulas reporting `#CYCLE!` when inactive fallback branches contained the only cyclic dependency.
+- Fixed `IFNA` formulas reporting `#CYCLE!` when inactive fallback branches contained the only cyclic dependency.
 
 ## [3.3.0] - 2026-05-20
 

@@ -346,6 +346,38 @@ export class BooleanPlugin extends FunctionPlugin implements FunctionPluginTypec
   }
 
   public ifna(ast: ProcedureAst, state: InterpreterState): InterpreterValue {
+    const metadata = this.metadata('IFNA')
+    if (ast.args.length !== 2) {
+      return this.ifnaWithEagerArguments(ast, state)
+    }
+
+    const arg1Value = this.evaluateAst(ast.args[0], state)
+    if (arg1Value instanceof SimpleRangeValue) {
+      return this.ifnaWithEagerArguments(ast, state)
+    }
+
+    const arg1 = this.coerceToType(arg1Value, metadata.parameters![0], state) as InternalScalarValue | undefined
+    if (arg1 === undefined) {
+      return new CellError(ErrorType.VALUE, ErrorMessage.WrongType)
+    }
+    if (arg1 instanceof CellError && arg1.type === ErrorType.NA) {
+      return this.evaluateIfNaFallback(ast.args[1], state)
+    }
+
+    return arg1
+  }
+
+  private evaluateIfNaFallback(ast: ProcedureAst['args'][number], state: InterpreterState): InterpreterValue {
+    const fallbackValue = this.evaluateAst(ast, state)
+    const coercedFallbackValue = this.coerceToType(fallbackValue, this.metadata('IFNA').parameters![1], state)
+    if (coercedFallbackValue === undefined) {
+      return new CellError(ErrorType.VALUE, ErrorMessage.WrongType)
+    }
+
+    return coercedFallbackValue as InterpreterValue
+  }
+
+  private ifnaWithEagerArguments(ast: ProcedureAst, state: InterpreterState): InterpreterValue {
     return this.runFunction(ast.args, state, this.metadata('IFNA'), (arg1: InternalScalarValue, arg2: InternalScalarValue) => {
       if (arg1 instanceof CellError && arg1.type === ErrorType.NA) {
         return arg2
