@@ -353,7 +353,7 @@ export class Evaluator {
     const rangesWithPreciseDependencies = new Set<string>()
 
     dependencies.forEach((dependency) => {
-      if (dependency.kind === 'RANGE_CELL') {
+      if (dependency.kind === 'RANGE_CELL' || dependency.kind === 'RANGE_EMPTY') {
         rangesWithPreciseDependencies.add(this.rangeDependencyKey(dependency.start, dependency.end))
       }
     })

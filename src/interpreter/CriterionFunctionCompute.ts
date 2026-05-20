@@ -13,6 +13,7 @@ import {CriterionLambda, CriterionPackage} from './Criterion'
 import {Interpreter} from './Interpreter'
 import {getRawValue, InternalScalarValue, RawScalarValue} from './InterpreterValue'
 import {SimpleRangeValue} from '../SimpleRangeValue'
+import {InterpreterState} from './InterpreterState'
 
 const findSmallerRangeForMany = (dependencyGraph: DependencyGraph, conditionRanges: AbsoluteCellRange[], valuesRange: AbsoluteCellRange): { smallerRangeVertex?: RangeVertex, restConditionRanges: AbsoluteCellRange[], restValuesRange: AbsoluteCellRange } => {
   if (valuesRange.end.row > valuesRange.start.row) {
@@ -41,6 +42,7 @@ export class CriterionFunctionCompute<T> {
     private readonly reduceInitialValue: T,
     private readonly composeFunction: (left: T, right: T) => T,
     private readonly mapFunction: (arg: InternalScalarValue) => T,
+    private readonly state: InterpreterState,
   ) {
     this.dependencyGraph = this.interpreter.dependencyGraph
   }
@@ -108,10 +110,38 @@ export class CriterionFunctionCompute<T> {
 
   private evaluateRangeValue(simpleValuesRange: SimpleRangeValue, conditions: Condition[]) {
     const criterionLambdas = conditions.map((condition) => condition.criterionPackage.lambda)
-    const values = Array.from(simpleValuesRange.valuesFromTopLeftCorner()).map(this.mapFunction)[Symbol.iterator]()
-    const conditionsIterators = conditions.map((condition) => condition.conditionRange.iterateValuesFromTopLeftCorner())
-    const filteredValues = ifFilter(criterionLambdas, conditionsIterators, values)
-    return this.reduceFunction(filteredValues)
+    const conditionsValues = conditions.map((condition) => condition.conditionRange.valuesFromTopLeftCorner())
+    const values = simpleValuesRange.range === undefined ? simpleValuesRange.valuesFromTopLeftCorner() : undefined
+    const valueAddresses = simpleValuesRange.range?.addresses(this.dependencyGraph)
+    const trackPreciseValueDependencies = this.shouldTrackPreciseValueDependencies(simpleValuesRange, conditions)
+    if (trackPreciseValueDependencies && simpleValuesRange.range !== undefined) {
+      this.state.activeEdgeCollector?.recordEmptyRangeEdge(this.state.formulaVertex, simpleValuesRange.range.start, simpleValuesRange.range.end)
+    }
+
+    let acc = this.reduceInitialValue
+    for (let index = 0; index < simpleValuesRange.numberOfElements(); index++) {
+      const conditionValues = conditionsValues.map((conditionValues) => getRawValue(conditionValues[index]))
+      if (!zip(conditionValues, criterionLambdas).every(([conditionalFirst, criterionLambda]) => criterionLambda(conditionalFirst))) {
+        continue
+      }
+
+      if (trackPreciseValueDependencies && simpleValuesRange.range !== undefined && valueAddresses !== undefined) {
+        this.state.activeEdgeCollector?.recordRangeCellEdge(this.state.formulaVertex, simpleValuesRange.range.start, simpleValuesRange.range.end, valueAddresses[index])
+      }
+
+      const value = values === undefined ? this.dependencyGraph.getScalarValue(valueAddresses![index]) : values[index]
+      acc = this.composeFunction(acc, this.mapFunction(value))
+    }
+
+    return acc
+  }
+
+  private shouldTrackPreciseValueDependencies(simpleValuesRange: SimpleRangeValue, conditions: Condition[]): boolean {
+    if (simpleValuesRange.range === undefined) {
+      return false
+    }
+
+    return conditions.every((condition) => condition.conditionRange.range === undefined || !condition.conditionRange.range.sameAs(simpleValuesRange.range!))
   }
 
   private buildNewCriterionCache(cacheKey: string, simpleConditionRanges: AbsoluteCellRange[], simpleValuesRange: AbsoluteCellRange): CriterionCache {

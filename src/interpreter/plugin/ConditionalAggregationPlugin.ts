@@ -160,6 +160,7 @@ export class ConditionalAggregationPlugin extends FunctionPlugin implements Func
       0,
       (left, right) => this.arithmeticHelper.nonstrictadd(left, right),
       mapToRawScalarValue as (arg: InternalScalarValue) => RawScalarValue,
+      state,
     )
 
     return this.runFunction(ast.args, state, this.metadata(functionName), computeFn)
@@ -175,6 +176,7 @@ export class ConditionalAggregationPlugin extends FunctionPlugin implements Func
       0,
       (left, right) => this.arithmeticHelper.nonstrictadd(left, right),
       mapToRawScalarValue as (arg: InternalScalarValue) => RawScalarValue,
+      state,
     )
 
     return this.runFunction(ast.args, state, this.metadata(functionName), computeFn)
@@ -195,6 +197,7 @@ export class ConditionalAggregationPlugin extends FunctionPlugin implements Func
         AverageResult.empty,
         (left, right) => left.compose(right),
         (arg) => isExtendedNumber(arg) ? AverageResult.single(getRawValue(arg)) : AverageResult.empty,
+        state,
         )
 
       if (averageResult instanceof CellError) {
@@ -228,6 +231,7 @@ export class ConditionalAggregationPlugin extends FunctionPlugin implements Func
       0,
       (left, right) => left + right,
       () => 1,
+      state,
     )
 
     return this.runFunction(ast.args, state, this.metadata(functionName), computeFn)
@@ -243,6 +247,7 @@ export class ConditionalAggregationPlugin extends FunctionPlugin implements Func
       0,
       (left, right) => left + right,
       () => 1,
+      state,
     )
 
     return this.runFunction(ast.args, state, this.metadata(functionName), computeFn)
@@ -267,6 +272,7 @@ export class ConditionalAggregationPlugin extends FunctionPlugin implements Func
         Number.POSITIVE_INFINITY,
         composeFunction,
         mapToRawScalarValue as (arg: InternalScalarValue) => RawScalarValue,
+        state,
       )
 
       return zeroForInfinite(minResult)
@@ -294,6 +300,7 @@ export class ConditionalAggregationPlugin extends FunctionPlugin implements Func
         Number.NEGATIVE_INFINITY,
         composeFunction,
         mapToRawScalarValue as (arg: InternalScalarValue) => RawScalarValue,
+        state,
       )
 
       return zeroForInfinite(maxResult)
@@ -308,7 +315,8 @@ export class ConditionalAggregationPlugin extends FunctionPlugin implements Func
     functionName: string,
     reduceInitialValue: T,
     composeFunction: (left: T, right: T) => T,
-    mapFunction: (arg: InternalScalarValue) => T
+    mapFunction: (arg: InternalScalarValue) => T,
+    state: InterpreterState,
   ): T | CellError {
     const conditions: Condition[] = []
     for (let i = 0; i < conditionArgs.length; i += 2) {
@@ -326,6 +334,7 @@ export class ConditionalAggregationPlugin extends FunctionPlugin implements Func
       reduceInitialValue,
       composeFunction,
       mapFunction,
+      state,
     ).compute(valuesRange, conditions)
   }
 }

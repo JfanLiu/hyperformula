@@ -18,9 +18,13 @@ const colNumber = (input: string): number => {
   }
 }
 
-const expectCycle = (value: unknown): void => {
+const expectCellError = (value: unknown, type: ErrorType): void => {
   expect(value).toBeInstanceOf(DetailedCellError)
-  expect((value as DetailedCellError).type).toBe(ErrorType.CYCLE)
+  expect((value as DetailedCellError).type).toBe(type)
+}
+
+const expectCycle = (value: unknown): void => {
+  expectCellError(value, ErrorType.CYCLE)
 }
 
 describe('HyperFormula', () => {
@@ -348,6 +352,61 @@ describe('HyperFormula', () => {
     expect(horizontalHf.getCellValue(adr('D1'))).toBe(11)
 
     horizontalHf.destroy()
+  })
+
+  it('should resolve conditional aggregation cycles from unused value range entries', () => {
+    const numericCases: [string, string, string][] = [
+      ['=SUMIF(A3:A4,1,B3:B4)', '=SUMIF(A3:A4,2,B3:B4)', '=SUMIF(A3:A4,3,B3:B4)'],
+      ['=SUMIFS(B3:B4,A3:A4,1)', '=SUMIFS(B3:B4,A3:A4,2)', '=SUMIFS(B3:B4,A3:A4,3)'],
+      ['=MINIFS(B3:B4,A3:A4,1)', '=MINIFS(B3:B4,A3:A4,2)', '=MINIFS(B3:B4,A3:A4,3)'],
+      ['=MAXIFS(B3:B4,A3:A4,1)', '=MAXIFS(B3:B4,A3:A4,2)', '=MAXIFS(B3:B4,A3:A4,3)'],
+    ]
+
+    for (const [formula, cyclicFormula, noMatchFormula] of numericCases) {
+      const hf = HyperFormula.buildFromArray([
+        [formula],
+        [null],
+        [1, 10],
+        [2, '=A1+1'],
+      ], {licenseKey: 'gpl-v3'})
+
+      expect(hf.getCellValue(adr('A1'))).toBe(10)
+      expect(hf.getCellValue(adr('B4'))).toBe(11)
+
+      hf.setCellContents(adr('A1'), cyclicFormula)
+
+      expectCycle(hf.getCellValue(adr('A1')))
+      expectCycle(hf.getCellValue(adr('B4')))
+
+      hf.setCellContents(adr('A1'), noMatchFormula)
+
+      expect(hf.getCellValue(adr('A1'))).toBe(0)
+      expect(hf.getCellValue(adr('B4'))).toBe(1)
+
+      hf.destroy()
+    }
+
+    const averageIfHf = HyperFormula.buildFromArray([
+      ['=AVERAGEIF(A3:A4,1,B3:B4)'],
+      [null],
+      [1, 10],
+      [2, '=A1+1'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(averageIfHf.getCellValue(adr('A1'))).toBe(10)
+    expect(averageIfHf.getCellValue(adr('B4'))).toBe(11)
+
+    averageIfHf.setCellContents(adr('A1'), '=AVERAGEIF(A3:A4,2,B3:B4)')
+
+    expectCycle(averageIfHf.getCellValue(adr('A1')))
+    expectCycle(averageIfHf.getCellValue(adr('B4')))
+
+    averageIfHf.setCellContents(adr('A1'), '=AVERAGEIF(A3:A4,3,B3:B4)')
+
+    expectCellError(averageIfHf.getCellValue(adr('A1')), ErrorType.DIV_BY_ZERO)
+    expectCellError(averageIfHf.getCellValue(adr('B4')), ErrorType.DIV_BY_ZERO)
+
+    averageIfHf.destroy()
   })
 
   it('should resolve exact MATCH cycles from cells after the first match', () => {

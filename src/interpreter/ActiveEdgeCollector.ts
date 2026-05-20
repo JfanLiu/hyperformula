@@ -9,6 +9,7 @@ import {FormulaVertex} from '../DependencyGraph/FormulaVertex'
 export type ActiveDependency =
   | {kind: 'CELL', address: SimpleCellAddress}
   | {kind: 'RANGE', start: SimpleCellAddress, end: SimpleCellAddress}
+  | {kind: 'RANGE_EMPTY', start: SimpleCellAddress, end: SimpleCellAddress}
   | {kind: 'RANGE_CELL', start: SimpleCellAddress, end: SimpleCellAddress, address: SimpleCellAddress}
   | {kind: 'NAMED_EXPRESSION', expressionName: string, address: SimpleCellAddress}
 
@@ -37,6 +38,10 @@ export class ActiveEdgeCollector {
 
   public recordRangeCellEdge(from: FormulaVertex | undefined, start: SimpleCellAddress, end: SimpleCellAddress, address: SimpleCellAddress): void {
     this.recordDependency(from, {kind: 'RANGE_CELL', start, end, address})
+  }
+
+  public recordEmptyRangeEdge(from: FormulaVertex | undefined, start: SimpleCellAddress, end: SimpleCellAddress): void {
+    this.recordDependency(from, {kind: 'RANGE_EMPTY', start, end})
   }
 
   public recordNamedExpressionEdge(from: FormulaVertex | undefined, expressionName: string, address: SimpleCellAddress): void {
@@ -70,6 +75,13 @@ export class ActiveEdgeCollector {
           && left.address.row === right.address.row
       case 'RANGE':
         return right.kind === 'RANGE'
+          && left.start.sheet === right.start.sheet
+          && left.start.col === right.start.col
+          && left.start.row === right.start.row
+          && left.end.col === right.end.col
+          && left.end.row === right.end.row
+      case 'RANGE_EMPTY':
+        return right.kind === 'RANGE_EMPTY'
           && left.start.sheet === right.start.sheet
           && left.start.col === right.start.col
           && left.start.row === right.start.row
