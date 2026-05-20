@@ -226,4 +226,44 @@ describe('HyperFormula', () => {
 
     hf.destroy()
   })
+
+  it('should resolve exact lookup cycles from unused table entries', () => {
+    const vlookupHf = HyperFormula.buildFromArray([
+      ['=VLOOKUP(1,A3:B4,2,FALSE())'],
+      [null],
+      [1, 10],
+      [2, '=A1+1'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(vlookupHf.getCellValue(adr('A1'))).toBe(10)
+    expect(vlookupHf.getCellValue(adr('B4'))).toBe(11)
+
+    vlookupHf.setCellContents(adr('A1'), '=VLOOKUP(2,A3:B4,2,FALSE())')
+
+    expectCycle(vlookupHf.getCellValue(adr('A1')))
+    expectCycle(vlookupHf.getCellValue(adr('B4')))
+
+    vlookupHf.setCellContents(adr('A1'), '=VLOOKUP(1,A3:B4,2,FALSE())')
+
+    expect(vlookupHf.getCellValue(adr('A1'))).toBe(10)
+    expect(vlookupHf.getCellValue(adr('B4'))).toBe(11)
+
+    vlookupHf.destroy()
+
+    const hlookupHf = HyperFormula.buildFromArray([
+      [1, 2],
+      [10, '=A3+1'],
+      ['=HLOOKUP(1,A1:B2,2,FALSE())'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(hlookupHf.getCellValue(adr('A3'))).toBe(10)
+    expect(hlookupHf.getCellValue(adr('B2'))).toBe(11)
+
+    hlookupHf.setCellContents(adr('A3'), '=HLOOKUP(2,A1:B2,2,FALSE())')
+
+    expectCycle(hlookupHf.getCellValue(adr('A3')))
+    expectCycle(hlookupHf.getCellValue(adr('B2')))
+
+    hlookupHf.destroy()
+  })
 })

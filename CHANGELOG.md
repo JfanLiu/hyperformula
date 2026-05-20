@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed `SWITCH` formulas reporting `#CYCLE!` when inactive branches contained the only cyclic dependency.
 - Fixed `IFERROR` formulas reporting `#CYCLE!` when inactive fallback branches contained the only cyclic dependency.
 - Fixed `IFNA` formulas reporting `#CYCLE!` when inactive fallback branches contained the only cyclic dependency.
+- Fixed exact `VLOOKUP` and `HLOOKUP` formulas reporting `#CYCLE!` when unused lookup table entries contained the only cyclic dependency.
 
 ## [3.3.0] - 2026-05-20
 

@@ -9,6 +9,7 @@ import {FormulaVertex} from '../DependencyGraph/FormulaVertex'
 export type ActiveDependency =
   | {kind: 'CELL', address: SimpleCellAddress}
   | {kind: 'RANGE', start: SimpleCellAddress, end: SimpleCellAddress}
+  | {kind: 'RANGE_CELL', start: SimpleCellAddress, end: SimpleCellAddress, address: SimpleCellAddress}
   | {kind: 'NAMED_EXPRESSION', expressionName: string, address: SimpleCellAddress}
 
 export interface ActiveEdgeSnapshot {
@@ -32,6 +33,10 @@ export class ActiveEdgeCollector {
 
   public recordRangeEdge(from: FormulaVertex | undefined, start: SimpleCellAddress, end: SimpleCellAddress): void {
     this.recordDependency(from, {kind: 'RANGE', start, end})
+  }
+
+  public recordRangeCellEdge(from: FormulaVertex | undefined, start: SimpleCellAddress, end: SimpleCellAddress, address: SimpleCellAddress): void {
+    this.recordDependency(from, {kind: 'RANGE_CELL', start, end, address})
   }
 
   public recordNamedExpressionEdge(from: FormulaVertex | undefined, expressionName: string, address: SimpleCellAddress): void {
@@ -70,6 +75,16 @@ export class ActiveEdgeCollector {
           && left.start.row === right.start.row
           && left.end.col === right.end.col
           && left.end.row === right.end.row
+      case 'RANGE_CELL':
+        return right.kind === 'RANGE_CELL'
+          && left.start.sheet === right.start.sheet
+          && left.start.col === right.start.col
+          && left.start.row === right.start.row
+          && left.end.col === right.end.col
+          && left.end.row === right.end.row
+          && left.address.sheet === right.address.sheet
+          && left.address.col === right.address.col
+          && left.address.row === right.address.row
       case 'NAMED_EXPRESSION':
         return right.kind === 'NAMED_EXPRESSION'
           && left.expressionName.toLowerCase() === right.expressionName.toLowerCase()

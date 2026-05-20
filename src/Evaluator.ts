@@ -350,14 +350,24 @@ export class Evaluator {
 
   private resolveDependenciesWithinScc(dependencies: ActiveDependency[], idToVertex: Map<number, FormulaVertex>): Set<number> {
     const dependencyIds = new Set<number>()
+    const rangesWithPreciseDependencies = new Set<string>()
 
     dependencies.forEach((dependency) => {
-      if (dependency.kind === 'CELL' || dependency.kind === 'NAMED_EXPRESSION') {
+      if (dependency.kind === 'RANGE_CELL') {
+        rangesWithPreciseDependencies.add(this.rangeDependencyKey(dependency.start, dependency.end))
+      }
+    })
+
+    dependencies.forEach((dependency) => {
+      if (dependency.kind === 'CELL' || dependency.kind === 'NAMED_EXPRESSION' || dependency.kind === 'RANGE_CELL') {
         const vertex = this.dependencyGraph.getCell(dependency.address)
         if (vertex instanceof FormulaVertex && vertex.idInGraph !== undefined && idToVertex.has(vertex.idInGraph)) {
           dependencyIds.add(vertex.idInGraph)
         }
       } else {
+        if (rangesWithPreciseDependencies.has(this.rangeDependencyKey(dependency.start, dependency.end))) {
+          return
+        }
         for (const [vertexId, formulaVertex] of idToVertex.entries()) {
           const address = formulaVertex.getAddress(this.lazilyTransformingAstService)
           if (address.sheet === dependency.start.sheet
@@ -370,6 +380,10 @@ export class Evaluator {
     })
 
     return dependencyIds
+  }
+
+  private rangeDependencyKey(start: SimpleCellAddress, end: SimpleCellAddress): string {
+    return `${start.sheet}:${start.col}:${start.row}:${end.col}:${end.row}`
   }
 
   private recomputeCyclicVertex(vertex: FormulaVertex, changes: ContentChanges, previousValue: InterpreterValue | undefined): void {

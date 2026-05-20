@@ -4,7 +4,7 @@
  */
 
 import { AbsoluteCellRange } from '../../AbsoluteCellRange'
-import { CellError, CellRange, ErrorType, simpleCellAddress } from '../../Cell'
+import { CellError, CellRange, ErrorType, simpleCellAddress, SimpleCellAddress } from '../../Cell'
 import { ErrorMessage } from '../../error-message'
 import { RowSearchStrategy } from '../../Lookup/RowSearchStrategy'
 import { SearchOptions, SearchStrategy } from '../../Lookup/SearchStrategy'
@@ -93,7 +93,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
         ifNoMatch: sorted ? 'returnLowerBound' : 'returnNotFound'
       }
 
-      return this.doVlookup(zeroIfEmpty(key), rangeValue, index - 1, searchOptions)
+      return this.doVlookup(zeroIfEmpty(key), rangeValue, index - 1, searchOptions, state)
     })
   }
 
@@ -123,7 +123,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
         ifNoMatch: sorted ? 'returnLowerBound' : 'returnNotFound'
       }
 
-      return this.doHlookup(zeroIfEmpty(key), rangeValue, index - 1, searchOptions)
+      return this.doHlookup(zeroIfEmpty(key), rangeValue, index - 1, searchOptions, state)
     })
   }
 
@@ -209,7 +209,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     return searchStrategy.find(key, range, searchOptions)
   }
 
-  private doVlookup(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, index: number, searchOptions: SearchOptions): InternalScalarValue {
+  private doVlookup(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, index: number, searchOptions: SearchOptions, state: InterpreterState): InternalScalarValue {
     this.dependencyGraph.stats.start(StatType.VLOOKUP)
     const range = rangeValue.range
     let searchedRange
@@ -219,6 +219,9 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
       searchedRange = SimpleRangeValue.onlyRange(AbsoluteCellRange.spanFrom(range.start, 1, range.height()), this.dependencyGraph)
     }
     const rowIndex = this.searchInRange(key, searchedRange, searchOptions.ordering === 'none', searchOptions, this.columnSearch)
+    if (range !== undefined && this.shouldTrackExactLookup(searchOptions)) {
+      this.recordVlookupSearchColumnAccesses(state, range)
+    }
 
     this.dependencyGraph.stats.end(StatType.VLOOKUP)
 
@@ -231,6 +234,9 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
       value = rangeValue.data[rowIndex][index]
     } else {
       const address = simpleCellAddress(range.sheet, range.start.col + index, range.start.row + rowIndex)
+      if (this.shouldTrackExactLookup(searchOptions)) {
+        this.recordRangeDependencyAccess(state, range, address)
+      }
       value = this.dependencyGraph.getCellValue(address)
     }
 
@@ -240,7 +246,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     return value
   }
 
-  private doHlookup(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, index: number, searchOptions: SearchOptions): InternalScalarValue {
+  private doHlookup(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, index: number, searchOptions: SearchOptions, state: InterpreterState): InternalScalarValue {
     const range = rangeValue.range
     let searchedRange
     if (range === undefined) {
@@ -249,6 +255,9 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
       searchedRange = SimpleRangeValue.onlyRange(AbsoluteCellRange.spanFrom(range.start, range.width(), 1), this.dependencyGraph)
     }
     const colIndex = this.searchInRange(key, searchedRange, searchOptions.ordering === 'none', searchOptions, this.rowSearch)
+    if (range !== undefined && this.shouldTrackExactLookup(searchOptions)) {
+      this.recordHlookupSearchRowAccesses(state, range)
+    }
 
     if (colIndex === -1) {
       return new CellError(ErrorType.NA, ErrorMessage.ValueNotFound)
@@ -259,6 +268,9 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
       value = rangeValue.data[index][colIndex]
     } else {
       const address = simpleCellAddress(range.sheet, range.start.col + colIndex, range.start.row + index)
+      if (this.shouldTrackExactLookup(searchOptions)) {
+        this.recordRangeDependencyAccess(state, range, address)
+      }
       value = this.dependencyGraph.getCellValue(address)
     }
 
@@ -306,5 +318,25 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
       return new CellError(ErrorType.NA, ErrorMessage.ValueNotFound)
     }
     return index + 1
+  }
+
+  private shouldTrackExactLookup(searchOptions: SearchOptions): boolean {
+    return searchOptions.ordering === 'none'
+  }
+
+  private recordVlookupSearchColumnAccesses(state: InterpreterState, range: AbsoluteCellRange): void {
+    for (let rowOffset = 0; rowOffset < range.height(); rowOffset++) {
+      this.recordRangeDependencyAccess(state, range, simpleCellAddress(range.sheet, range.start.col, range.start.row + rowOffset))
+    }
+  }
+
+  private recordHlookupSearchRowAccesses(state: InterpreterState, range: AbsoluteCellRange): void {
+    for (let colOffset = 0; colOffset < range.width(); colOffset++) {
+      this.recordRangeDependencyAccess(state, range, simpleCellAddress(range.sheet, range.start.col + colOffset, range.start.row))
+    }
+  }
+
+  private recordRangeDependencyAccess(state: InterpreterState, range: AbsoluteCellRange, address: SimpleCellAddress): void {
+    state.activeEdgeCollector?.recordRangeCellEdge(state.formulaVertex, range.start, range.end, address)
   }
 }
