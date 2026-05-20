@@ -266,4 +266,38 @@ describe('HyperFormula', () => {
 
     hlookupHf.destroy()
   })
+
+  it('should resolve XLOOKUP cycles from unused return array entries', () => {
+    const verticalHf = HyperFormula.buildFromArray([
+      ['=XLOOKUP(1,A3:A4,B3:B4)'],
+      [null],
+      [1, 10],
+      [2, '=A1+1'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(verticalHf.getCellValue(adr('A1'))).toBe(10)
+    expect(verticalHf.getCellValue(adr('B4'))).toBe(11)
+
+    verticalHf.setCellContents(adr('A1'), '=XLOOKUP(2,A3:A4,B3:B4)')
+
+    expectCycle(verticalHf.getCellValue(adr('A1')))
+    expectCycle(verticalHf.getCellValue(adr('B4')))
+
+    verticalHf.destroy()
+
+    const horizontalHf = HyperFormula.buildFromArray([
+      [null, null, 1, 2],
+      ['=XLOOKUP(1,C1:D1,C2:D2)', null, 10, '=A2+1'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(horizontalHf.getCellValue(adr('A2'))).toBe(10)
+    expect(horizontalHf.getCellValue(adr('D2'))).toBe(11)
+
+    horizontalHf.setCellContents(adr('A2'), '=XLOOKUP(2,C1:D1,C2:D2)')
+
+    expectCycle(horizontalHf.getCellValue(adr('A2')))
+    expectCycle(horizontalHf.getCellValue(adr('D2')))
+
+    horizontalHf.destroy()
+  })
 })

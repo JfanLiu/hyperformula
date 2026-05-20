@@ -156,7 +156,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
             : 'returnNotFound'
       }
 
-      return this.doXlookup(zeroIfEmpty(key), lookupRange, returnRange, notFoundFlag, isWildcardMatchMode, searchOptions)
+      return this.doXlookup(zeroIfEmpty(key), lookupRange, returnRange, notFoundFlag, isWildcardMatchMode, searchOptions, state)
     })
   }
 
@@ -280,7 +280,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     return value
   }
 
-  private doXlookup(key: RawNoErrorScalarValue, lookupRange: SimpleRangeValue, returnRange: SimpleRangeValue, notFoundFlag: any, isWildcardMatchMode: boolean, searchOptions: SearchOptions): InterpreterValue {
+  private doXlookup(key: RawNoErrorScalarValue, lookupRange: SimpleRangeValue, returnRange: SimpleRangeValue, notFoundFlag: any, isWildcardMatchMode: boolean, searchOptions: SearchOptions, state: InterpreterState): InterpreterValue {
     const isVerticalSearch = lookupRange.width() === 1 && returnRange.height() === lookupRange.height()
     const isHorizontalSearch = lookupRange.height() === 1 && returnRange.width() === lookupRange.width()
 
@@ -295,7 +295,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
       return (notFoundFlag == ErrorType.NA) ? new CellError(ErrorType.NA, ErrorMessage.ValueNotFound) : notFoundFlag
     }
 
-    const returnValues: InternalScalarValue[][] = isVerticalSearch ? [returnRange.data[indexFound]] : returnRange.data.map((row) => [row[indexFound]])
+    const returnValues = this.xlookupReturnValues(returnRange, indexFound, isVerticalSearch, state)
     return SimpleRangeValue.onlyValues(returnValues)
   }
 
@@ -338,5 +338,35 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
 
   private recordRangeDependencyAccess(state: InterpreterState, range: AbsoluteCellRange, address: SimpleCellAddress): void {
     state.activeEdgeCollector?.recordRangeCellEdge(state.formulaVertex, range.start, range.end, address)
+  }
+
+  private xlookupReturnValues(returnRange: SimpleRangeValue, indexFound: number, isVerticalSearch: boolean, state: InterpreterState): InternalScalarValue[][] {
+    if (returnRange.range === undefined) {
+      return isVerticalSearch ? [returnRange.data[indexFound]] : returnRange.data.map((row) => [row[indexFound]])
+    }
+
+    if (isVerticalSearch) {
+      const row: InternalScalarValue[] = []
+      for (let colOffset = 0; colOffset < returnRange.width(); colOffset++) {
+        row.push(this.getRangeScalarValue(state, returnRange.range, colOffset, indexFound))
+      }
+      return [row]
+    }
+
+    const values: InternalScalarValue[][] = []
+    for (let rowOffset = 0; rowOffset < returnRange.height(); rowOffset++) {
+      values.push([this.getRangeScalarValue(state, returnRange.range, indexFound, rowOffset)])
+    }
+    return values
+  }
+
+  private getRangeScalarValue(state: InterpreterState, range: AbsoluteCellRange, colOffset: number, rowOffset: number): InternalScalarValue {
+    const address = simpleCellAddress(range.sheet, range.start.col + colOffset, range.start.row + rowOffset)
+    this.recordRangeDependencyAccess(state, range, address)
+    const value = this.dependencyGraph.getCellValue(address)
+    if (value instanceof SimpleRangeValue) {
+      return new CellError(ErrorType.VALUE, ErrorMessage.ScalarExpected)
+    }
+    return value
   }
 }
