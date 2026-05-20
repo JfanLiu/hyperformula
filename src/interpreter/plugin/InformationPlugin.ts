@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Handsoncode. All rights reserved.
  */
 
-import {CellError, ErrorType, SimpleCellAddress} from '../../Cell'
+import {CellError, ErrorType, simpleCellAddress, SimpleCellAddress} from '../../Cell'
 import {FormulaVertex} from '../../DependencyGraph/FormulaVertex'
 import {ErrorMessage} from '../../error-message'
 import {AstNodeType, ProcedureAst} from '../../parser'
@@ -427,6 +427,11 @@ export class InformationPlugin extends FunctionPlugin implements FunctionPluginT
       }
       if (col > rangeValue.width() || row > rangeValue.height()) {
         return new CellError(ErrorType.NUM, ErrorMessage.ValueLarge)
+      }
+      if (rangeValue.range !== undefined) {
+        const address = simpleCellAddress(rangeValue.range.sheet, rangeValue.range.start.col + col - 1, rangeValue.range.start.row + row - 1)
+        state.activeEdgeCollector?.recordRangeCellEdge(state.formulaVertex, rangeValue.range.start, rangeValue.range.end, address)
+        return this.dependencyGraph.getScalarValue(address)
       }
       return rangeValue?.data?.[row - 1]?.[col - 1] ?? rangeValue?.data?.[0]?.[0] ?? new CellError(ErrorType.VALUE, ErrorMessage.CellRangeExpected)
     })

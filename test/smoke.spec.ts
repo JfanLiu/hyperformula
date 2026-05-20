@@ -324,4 +324,45 @@ describe('HyperFormula', () => {
 
     horizontalHf.destroy()
   })
+
+  it('should resolve INDEX cycles from unused range entries', () => {
+    const verticalHf = HyperFormula.buildFromArray([
+      ['=INDEX(A3:A4,1,1)'],
+      [null],
+      [10],
+      ['=A1+1'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(verticalHf.getCellValue(adr('A1'))).toBe(10)
+    expect(verticalHf.getCellValue(adr('A4'))).toBe(11)
+
+    verticalHf.setCellContents(adr('A1'), '=INDEX(A3:A4,2,1)')
+
+    expectCycle(verticalHf.getCellValue(adr('A1')))
+    expectCycle(verticalHf.getCellValue(adr('A4')))
+
+    verticalHf.destroy()
+
+    const horizontalHf = HyperFormula.buildFromArray([
+      [null, null, 10, '=A2+1'],
+      ['=INDEX(C1:D1,1,1)'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(horizontalHf.getCellValue(adr('A2'))).toBe(10)
+    expect(horizontalHf.getCellValue(adr('D1'))).toBe(11)
+
+    horizontalHf.destroy()
+
+    const twoDimensionalHf = HyperFormula.buildFromArray([
+      ['=INDEX(A3:B4,1,1)'],
+      [null],
+      [10, 20],
+      [30, '=A1+1'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(twoDimensionalHf.getCellValue(adr('A1'))).toBe(10)
+    expect(twoDimensionalHf.getCellValue(adr('B4'))).toBe(11)
+
+    twoDimensionalHf.destroy()
+  })
 })
