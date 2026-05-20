@@ -10,9 +10,9 @@ import { RowSearchStrategy } from '../../Lookup/RowSearchStrategy'
 import { SearchOptions, SearchStrategy } from '../../Lookup/SearchStrategy'
 import { ProcedureAst } from '../../parser'
 import { StatType } from '../../statistics'
-import { zeroIfEmpty } from '../ArithmeticHelper'
+import { forceNormalizeString, zeroIfEmpty } from '../ArithmeticHelper'
 import { InterpreterState } from '../InterpreterState'
-import { InternalScalarValue, InterpreterValue, RawNoErrorScalarValue } from '../InterpreterValue'
+import { getRawValue, InternalScalarValue, InterpreterValue, RawNoErrorScalarValue, RawScalarValue } from '../InterpreterValue'
 import { SimpleRangeValue } from '../../SimpleRangeValue'
 import { FunctionArgumentType, FunctionPlugin, FunctionPluginTypecheck, ImplementedFunctions } from './FunctionPlugin'
 import { ArraySize } from '../../ArraySize'
@@ -193,7 +193,7 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
 
   public match(ast: ProcedureAst, state: InterpreterState): InterpreterValue {
     return this.runFunction(ast.args, state, this.metadata('MATCH'), (key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, type: number) => {
-      return this.doMatch(zeroIfEmpty(key), rangeValue, type)
+      return this.doMatch(zeroIfEmpty(key), rangeValue, type, state)
     })
   }
 
@@ -299,13 +299,22 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
     return SimpleRangeValue.onlyValues(returnValues)
   }
 
-  private doMatch(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, type: number): InternalScalarValue {
+  private doMatch(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, type: number, state: InterpreterState): InternalScalarValue {
     if (![-1, 0, 1].includes(type)) {
       return new CellError(ErrorType.VALUE, ErrorMessage.BadMode)
     }
 
     if (rangeValue.width() > 1 && rangeValue.height() > 1) {
       return new CellError(ErrorType.NA)
+    }
+
+    if (type === 0) {
+      const index = this.findExactMatch(key, rangeValue, state)
+
+      if (index === -1) {
+        return new CellError(ErrorType.NA, ErrorMessage.ValueNotFound)
+      }
+      return index + 1
     }
 
     const searchStrategy = rangeValue.width() === 1 ? this.columnSearch : this.rowSearch
@@ -318,6 +327,43 @@ export class LookupPlugin extends FunctionPlugin implements FunctionPluginTypech
       return new CellError(ErrorType.NA, ErrorMessage.ValueNotFound)
     }
     return index + 1
+  }
+
+  private findExactMatch(key: RawNoErrorScalarValue, rangeValue: SimpleRangeValue, state: InterpreterState): number {
+    const normalizedKey = LookupPlugin.normalizeMatchValue(key)
+
+    if (rangeValue.range === undefined) {
+      const values = rangeValue.valuesFromTopLeftCorner()
+      for (let index = 0; index < values.length; index++) {
+        if (LookupPlugin.normalizeMatchValue(values[index]) === normalizedKey) {
+          return index
+        }
+      }
+      return -1
+    }
+
+    const range = rangeValue.range
+    const isVertical = rangeValue.width() === 1
+    const length = isVertical ? range.height() : range.width()
+
+    for (let index = 0; index < length; index++) {
+      const address = isVertical
+        ? simpleCellAddress(range.sheet, range.start.col, range.start.row + index)
+        : simpleCellAddress(range.sheet, range.start.col + index, range.start.row)
+
+      this.recordRangeDependencyAccess(state, range, address)
+
+      if (LookupPlugin.normalizeMatchValue(this.dependencyGraph.getScalarValue(address)) === normalizedKey) {
+        return index
+      }
+    }
+
+    return -1
+  }
+
+  private static normalizeMatchValue(value: InternalScalarValue | RawNoErrorScalarValue): RawScalarValue {
+    const rawValue = getRawValue(value)
+    return typeof rawValue === 'string' ? forceNormalizeString(rawValue) : rawValue
   }
 
   private shouldTrackExactLookup(searchOptions: SearchOptions): boolean {

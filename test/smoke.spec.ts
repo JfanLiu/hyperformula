@@ -300,4 +300,28 @@ describe('HyperFormula', () => {
 
     horizontalHf.destroy()
   })
+
+  it('should resolve exact MATCH cycles from cells after the first match', () => {
+    const verticalHf = HyperFormula.buildFromArray([
+      ['=MATCH(1,A3:A4,0)'],
+      [null],
+      [1],
+      ['=A1+1'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(verticalHf.getCellValue(adr('A1'))).toBe(1)
+    expect(verticalHf.getCellValue(adr('A4'))).toBe(2)
+
+    verticalHf.destroy()
+
+    const horizontalHf = HyperFormula.buildFromArray([
+      [null, null, 1, '=A2+1'],
+      ['=MATCH(1,C1:D1,0)'],
+    ], {licenseKey: 'gpl-v3'})
+
+    expect(horizontalHf.getCellValue(adr('A2'))).toBe(1)
+    expect(horizontalHf.getCellValue(adr('D1'))).toBe(2)
+
+    horizontalHf.destroy()
+  })
 })
